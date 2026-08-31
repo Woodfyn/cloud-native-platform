@@ -7,7 +7,7 @@ env:
   POSTGRES_ADDRESS: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
 
 tasks:
-  app-run:
+  run:
     cmds:
       - go run -v main.go
 

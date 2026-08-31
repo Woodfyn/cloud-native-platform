@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 	"uuid"
@@ -124,15 +124,6 @@ func setError(
 	ctx.JSON(code, result)
 }
 
-type orderDB struct {
-	OrderID      string
-	CustomerName string
-	OrderNumber  string
-	TotalAmount  big.Rat
-	CreatedAt    time.Time
-	UpdatedAt    sql.NullTime
-}
-
 const _getQuery = `SELECT
 order_id,
 customer_name,
@@ -157,6 +148,15 @@ func (c *controller) getOrders(ctx *gin.Context) {
 		return
 	}
 	defer rows.Close()
+
+	type orderDB struct {
+		OrderID      string
+		CustomerName string
+		OrderNumber  string
+		TotalAmount  float64
+		CreatedAt    time.Time
+		UpdatedAt    sql.NullTime
+	}
 
 	orderRows := make([]orderDB, 0)
 	for rows.Next() {
@@ -203,8 +203,6 @@ func (c *controller) getOrders(ctx *gin.Context) {
 	orderResults := make([]orderResult, len(orderRows))
 
 	for i, row := range orderRows {
-		totalAmount, _ := row.TotalAmount.Float64()
-
 		var updatedAt *string
 		if row.UpdatedAt.Valid {
 			value := row.UpdatedAt.Time.Format(time.DateTime)
@@ -215,7 +213,7 @@ func (c *controller) getOrders(ctx *gin.Context) {
 			OrderID:      row.OrderID,
 			CustomerName: row.CustomerName,
 			OrderNumber:  row.OrderNumber,
-			TotalAmount:  totalAmount,
+			TotalAmount:  row.TotalAmount,
 			CreatedAt:    row.CreatedAt.Format(time.DateTime),
 			UpdatedAt:    updatedAt,
 		}
@@ -263,10 +261,7 @@ func (c *controller) createOrder(ctx *gin.Context) {
 	}
 
 	orderID := uuid.New().String()
-	totalAmount := big.
-		NewRat(0, 1).
-		SetFloat64(orderInput.TotalAmount)
-
+	totalAmount := strconv.FormatFloat(orderInput.TotalAmount, 'f', 2, 64)
 	if _, err := c.psqlConn.Exec(
 		ctx.Request.Context(),
 		_createQuery,
