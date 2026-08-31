@@ -37,3 +37,13 @@ tasks:
       GOOSE_DBSTRING: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
       GOOSE_MIGRATION_DIR: ./schema
       GOOSE_TABLE: "goose_db_version"
+  
+  cleanup-psql-container:
+    cmds:
+      - |
+         goose down 20260831194800
+    env:
+      GOOSE_DRIVER: "postgres"
+      GOOSE_DBSTRING: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
+      GOOSE_MIGRATION_DIR: ./schema
+      GOOSE_TABLE: "goose_db_version"
