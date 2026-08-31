@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,6 +16,26 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type config struct {
+	PostgresAddress string
+	LogLevel        string
+}
+
+func initConfig() *config {
+	get := func(key string) string {
+		if value := os.Getenv(key); value == "" {
+			panic(fmt.Errorf("Value %s must be privode", key))
+		} else {
+			return value
+		}
+	}
+
+	return &config{
+		PostgresAddress: get("POSTGRES_ADDRESS"),
+		LogLevel:        get("LOG_LEVEL"),
+	}
+}
+
 func main() {
 	rootCtx, stop := signal.NotifyContext(
 		context.Background(),
@@ -23,8 +44,9 @@ func main() {
 	)
 	defer stop()
 
-	logger := initLogger()
-	psqlConn := initPSQLConn(rootCtx)
+	conf := initConfig()
+	logger := initLogger(conf.LogLevel)
+	psqlConn := initPSQLConn(rootCtx, conf.PostgresAddress)
 	ctrl := newController(psqlConn, logger)
 
 	router, err := graceful.Default(
@@ -48,7 +70,7 @@ func main() {
 	})
 
 	router.GET("/orders", ctrl.getOrders)
-	router.POST("/orders/:", ctrl.createOrder)
+	router.POST("/orders", ctrl.createOrder)
 
 	router.GET("/healthz", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "OK")
@@ -96,9 +118,9 @@ func (c *controller) createOrder(ctx *gin.Context) {
 	})
 }
 
-func initLogger() *slog.Logger {
+func initLogger(logLevel string) *slog.Logger {
 	slogLevel := slog.LevelInfo
-	switch os.Getenv("LOG_LEVEL") {
+	switch logLevel {
 	case "debug":
 		slogLevel = slog.LevelDebug
 	case "info":
@@ -112,8 +134,11 @@ func initLogger() *slog.Logger {
 	}))
 }
 
-func initPSQLConn(ctx context.Context) *pgx.Conn {
-	conn, err := pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
+func initPSQLConn(
+	ctx context.Context,
+	psqlAddress string,
+) *pgx.Conn {
+	conn, err := pgx.Connect(ctx, psqlAddress)
 	if err != nil {
 		panic(err)
 	}

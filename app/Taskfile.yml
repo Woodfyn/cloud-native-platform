@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+env:
+  LOG_LEVEL: "debug"
+  POSTGRES_ADDRESS: "postgres://admin:admin@localhost:5432/orders"
+
+tasks:
+  app-run:
+    cmds:
+      - go run -v main.go
+
+  psql-container:
+    cmds:
+      - |
+        docker run --name orders-db \
+          -p 5432:5432 \
+          -e POSTGRES_USER=admin \
+          -e POSTGRES_PASSWORD=admin \
+          -e POSTGRES_DB=orders \
+          -d postgres
