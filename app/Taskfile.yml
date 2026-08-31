@@ -4,19 +4,36 @@ version: '3'
 
 env:
   LOG_LEVEL: "debug"
-  POSTGRES_ADDRESS: "postgres://admin:admin@localhost:5432/orders"
+  POSTGRES_ADDRESS: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
 
 tasks:
   app-run:
     cmds:
       - go run -v main.go
 
-  psql-container:
+  dev-psql-container:
     cmds:
       - |
+        docker rm -f orders-db 2>/dev/null || true
+
         docker run --name orders-db \
           -p 5432:5432 \
           -e POSTGRES_USER=admin \
           -e POSTGRES_PASSWORD=admin \
           -e POSTGRES_DB=orders \
           -d postgres
+
+        echo "Waiting for PostgreSQL..."
+
+        until docker exec orders-db pg_isready -U admin -d orders; do
+          sleep 1
+        done
+
+        echo "PostgreSQL is ready"
+
+        goose up-to 20260831194800
+    env:
+      GOOSE_DRIVER: "postgres"
+      GOOSE_DBSTRING: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
+      GOOSE_MIGRATION_DIR: ./schema
+      GOOSE_TABLE: "goose_db_version"
