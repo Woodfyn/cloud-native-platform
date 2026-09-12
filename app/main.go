@@ -68,10 +68,6 @@ func main() {
 	}
 	defer router.Close()
 
-	router.Use(func(ctx *gin.Context) {
-		logger.Debug("%s: %s", ctx.Request.Method, ctx.Request.RequestURI)
-	})
-
 	router.GET("/orders", ctrl.getOrders)
 	router.POST("/orders", ctrl.createOrder)
 
