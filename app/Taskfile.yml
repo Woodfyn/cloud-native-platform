@@ -11,17 +11,47 @@ tasks:
     cmds:
       - go run -v main.go
 
+  docker-network:
+    cmds:
+      - docker network create cloud-native-network 2>/dev/null || true
+
+  docker-build:
+    cmds:
+      - docker build -t cloud-native-api:latest .
+
+  docker-run:
+    deps:
+      - docker-network
+      - docker-build
+    cmds:
+      - |
+        docker rm -f cloud-native-api 2>/dev/null || true
+
+        docker run \
+          --name cloud-native-api \
+          --network cloud-native-network \
+          --env-file .env \
+          -p 8080:8080 \
+          cloud-native-api:latest
+
   dev-psql-container:
+    deps:
+      - docker-network
     cmds:
       - |
         docker rm -f orders-db 2>/dev/null || true
 
-        docker run --name orders-db \
+        docker volume create orders-db-data >/dev/null
+
+        docker run \
+          --name orders-db \
+          --network cloud-native-network \
           -p 5432:5432 \
           -e POSTGRES_USER=admin \
           -e POSTGRES_PASSWORD=admin \
           -e POSTGRES_DB=orders \
-          -d postgres
+          -v orders-db-data:/var/lib/postgresql/data \
+          -d postgres:17
 
         echo "Waiting for PostgreSQL..."
 
@@ -37,11 +67,10 @@ tasks:
       GOOSE_DBSTRING: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
       GOOSE_MIGRATION_DIR: ./schema
       GOOSE_TABLE: "goose_db_version"
-  
+
   cleanup-psql-container:
     cmds:
-      - |
-         goose down 20260831194800
+      - goose down
     env:
       GOOSE_DRIVER: "postgres"
       GOOSE_DBSTRING: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
