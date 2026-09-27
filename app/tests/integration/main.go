@@ -6,6 +6,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// https://medium.com/@dilshataliev/integration-tests-with-golang-test-containers-and-postgres-abb49e8096c5
 	os.Exit(m.Run())
 }
 
