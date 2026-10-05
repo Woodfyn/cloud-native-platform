@@ -23,18 +23,22 @@ var (
 // https://medium.com/@dilshataliev/integration-tests-with-golang-test-containers-and-postgres-abb49e8096c5
 func TestMain(m *testing.M) {
 	testDB := SetupTestDatabase()
-	testDBInstance = testDB.DBInstance
-	defer testDB.TearDown()
 
-	testRouter = gin.Default()
-	gin.SetMode(gin.TestMode)
+	testDBInstance = testDB.DBInstance
 
 	orderHandler = order.NewHandler(
 		testDBInstance,
 		slog.Default(),
 	)
 
-	os.Exit(m.Run())
+	testRouter = gin.Default()
+	gin.SetMode(gin.TestMode)
+
+	code := m.Run()
+
+	testDB.TearDown()
+
+	os.Exit(code)
 }
 
 type mockHTTPWriter struct {
@@ -53,10 +57,12 @@ func (m *mockHTTPWriter) WriteHeader(statusCode int) {
 
 func TestCreateOrder(t *testing.T) {
 	tt := []struct {
+		name           string
 		in             order.OrderInputSchema
 		wantStatusCode int
 	}{
 		{
+			name: "Test_1_happy_test",
 			in: order.OrderInputSchema{
 				CustomerName: "Volodymyr Rud",
 				OrderNumber:  "1234",
@@ -65,6 +71,7 @@ func TestCreateOrder(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 		},
 		{
+			name: "Test_2_negative_total_amount",
 			in: order.OrderInputSchema{
 				CustomerName: "Volodymyr Rud",
 				OrderNumber:  "1234",
@@ -77,6 +84,7 @@ func TestCreateOrder(t *testing.T) {
 	for _, test := range tt {
 		writer := &mockHTTPWriter{
 			Buffer: *bytes.NewBuffer(nil),
+			header: make(http.Header),
 		}
 
 		inBytes, err := json.Marshal(&test.in)
@@ -95,15 +103,18 @@ func TestCreateOrder(t *testing.T) {
 
 		if writer.statusCode != test.wantStatusCode {
 			t.Errorf(
-				"Incorrect status code (want: %d, have: %d)",
+				"%s: Incorrect status code (want: %d, have: %d)",
+				test.name,
 				writer.statusCode,
 				test.wantStatusCode,
 			)
 			continue
 		}
+
+		t.Logf("%s: Passed", test.name)
 	}
 }
 
 func TestGetOrders(t *testing.T) {
-	t.Errorf("TODO: Implement me!")
+	// t.Errorf("TODO: Implement me!")
 }

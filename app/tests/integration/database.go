@@ -12,7 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 const (
@@ -21,132 +21,146 @@ const (
 	DBPassword = "test_password"
 )
 
-func psqlURL(address string) string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s/%s?sslmode=disable",
-		DBUser,
-		DBPassword,
-		address,
-		DBName,
-	)
-}
-
 type TestDatabase struct {
 	DBInstance *pgxpool.Pool
-	DBAddress  string
-	container  testcontainers.Container
+	DBURL      string
+	container  *postgres.PostgresContainer
 }
 
 func SetupTestDatabase() *TestDatabase {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		60*time.Second,
+	)
 	defer cancel()
 
-	container, dbInstance, dbAddr, err := createContainer(ctx)
+	container, dbInstance, dbURL, err := createContainer(ctx)
 	if err != nil {
 		log.Fatal("failed to setup test: ", err)
 	}
 
-	if err := migrateDB(ctx, dbAddr); err != nil {
+	if err := migrateDB(ctx, dbURL); err != nil {
+		_ = testcontainers.TerminateContainer(container)
+
 		log.Fatal("failed to perform db migration: ", err)
 	}
 
 	return &TestDatabase{
 		container:  container,
 		DBInstance: dbInstance,
-		DBAddress:  dbAddr,
+		DBURL:      dbURL,
 	}
 }
 
 func (tdb *TestDatabase) TearDown() {
-	tdb.DBInstance.Close()
-	_ = tdb.container.Terminate(context.Background())
+	if tdb.DBInstance != nil {
+		tdb.DBInstance.Close()
+	}
+
+	if tdb.container != nil {
+		if err := testcontainers.TerminateContainer(tdb.container); err != nil {
+			log.Printf("failed to terminate postgres container: %v", err)
+		}
+	}
 }
 
-func createContainer(ctx context.Context) (
-	testcontainers.Container,
+func createContainer(
+	ctx context.Context,
+) (
+	*postgres.PostgresContainer,
 	*pgxpool.Pool,
 	string,
 	error,
 ) {
-	env := map[string]string{
-		"POSTGRES_PASSWORD": DBPassword,
-		"POSTGRES_USER":     DBUser,
-		"POSTGRES_DB":       DBName,
-	}
+	container, err := postgres.Run(
+		ctx,
+		"postgres:14-alpine",
 
-	req := testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "postgres:14-alpine",
-			ExposedPorts: []string{"5432/tcp"},
-			Env:          env,
-			WaitingFor: wait.ForLog(
-				"database system is ready to accept connections",
-			),
-		},
-		Started: true,
-	}
+		postgres.WithDatabase(DBName),
+		postgres.WithUsername(DBUser),
+		postgres.WithPassword(DBPassword),
 
-	container, err := testcontainers.GenericContainer(ctx, req)
+		postgres.BasicWaitStrategies(),
+	)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf(
-			"failed to start container: %w",
+			"failed to start postgres container: %w",
 			err,
 		)
 	}
 
-	p, err := container.MappedPort(ctx, "5432")
+	dbURL, err := container.ConnectionString(
+		ctx,
+		"sslmode=disable",
+	)
 	if err != nil {
-		return container, nil, "", fmt.Errorf(
-			"failed to get container external port: %w",
+		_ = testcontainers.TerminateContainer(container)
+
+		return nil, nil, "", fmt.Errorf(
+			"failed to get postgres connection string: %w",
 			err,
 		)
 	}
 
-	dbAddr := fmt.Sprintf("localhost:%s", p.Port())
-
-	db, err := pgxpool.New(ctx, psqlURL(dbAddr))
+	db, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
-		return container, nil, dbAddr, fmt.Errorf(
+		_ = testcontainers.TerminateContainer(container)
+
+		return nil, nil, "", fmt.Errorf(
 			"failed to create database pool: %w",
 			err,
 		)
 	}
 
-	// pgxpool.New doesn't actually verify the connection.
+	// pgxpool.New only creates the pool configuration.
+	// Ping verifies that we can actually connect.
 	if err := db.Ping(ctx); err != nil {
-		return container, nil, dbAddr, fmt.Errorf(
+		db.Close()
+		_ = testcontainers.TerminateContainer(container)
+
+		return nil, nil, "", fmt.Errorf(
 			"failed to connect to database: %w",
 			err,
 		)
 	}
 
-	return container, db, dbAddr, nil
+	return container, db, dbURL, nil
 }
 
 func migrateDB(
 	ctx context.Context,
-	address string,
+	dbURL string,
 ) error {
-	db, err := sql.Open("pgx", psqlURL(address))
+	db, err := sql.Open("pgx", dbURL)
 	if err != nil {
-		return fmt.Errorf("open migration database: %w", err)
+		return fmt.Errorf(
+			"open migration database: %w",
+			err,
+		)
 	}
 	defer db.Close()
 
 	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping migration database: %w", err)
+		return fmt.Errorf(
+			"ping migration database: %w",
+			err,
+		)
 	}
 
 	goose.SetBaseFS(schema.Migrations)
 
 	if err := goose.SetDialect("postgres"); err != nil {
-		return fmt.Errorf("set goose dialect: %w", err)
+		return fmt.Errorf(
+			"set goose dialect: %w",
+			err,
+		)
 	}
 
-	// Important: your embed path is schema/*.sql,
-	// therefore the goose directory must be "schema".
-	if err := goose.UpContext(ctx, db, "schema"); err != nil {
-		return fmt.Errorf("run goose migrations: %w", err)
+	if err := goose.UpContext(ctx, db, "."); err != nil {
+		return fmt.Errorf(
+			"run goose migrations: %w",
+			err,
+		)
 	}
 
 	log.Println("migration done")

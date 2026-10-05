@@ -76,3 +76,7 @@ tasks:
       GOOSE_DBSTRING: "postgres://admin:admin@localhost:5432/orders?sslmode=disable"
       GOOSE_MIGRATION_DIR: ./schema
       GOOSE_TABLE: "goose_db_version"
+
+  run-integraion-tests:
+    cmds:
+      - go test ./tests/integration
