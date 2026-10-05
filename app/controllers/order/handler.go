@@ -9,20 +9,20 @@ import (
 	"uuid"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Handler struct {
-	psqlConn *pgx.Conn
+	psqlPool *pgxpool.Pool
 	log      *slog.Logger
 }
 
 func NewHandler(
-	psqlConn *pgx.Conn,
+	psqlPool *pgxpool.Pool,
 	log *slog.Logger,
 ) *Handler {
 	return &Handler{
-		psqlConn: psqlConn,
+		psqlPool: psqlPool,
 		log:      log,
 	}
 }
@@ -54,7 +54,7 @@ updated_at
 FROM orders`
 
 func (h *Handler) Get(ctx *gin.Context) {
-	rows, err := h.psqlConn.Query(
+	rows, err := h.psqlPool.Query(
 		ctx.Request.Context(),
 		_getQuery,
 	)
@@ -154,14 +154,14 @@ const _createQuery = `INSERT INTO orders (
 	$4
 );`
 
-func (h *Handler) Create(ctx *gin.Context) {
-	type orderInputSchema struct {
-		CustomerName string  `json:"customer_name"`
-		OrderNumber  string  `json:"order_number"`
-		TotalAmount  float64 `json:"total_amount"`
-	}
+type OrderInputSchema struct {
+	CustomerName string  `json:"customer_name"`
+	OrderNumber  string  `json:"order_number"`
+	TotalAmount  float64 `json:"total_amount"`
+}
 
-	var orderInput orderInputSchema
+func (h *Handler) Create(ctx *gin.Context) {
+	var orderInput OrderInputSchema
 	if err := ctx.BindJSON(&orderInput); err != nil {
 		setError(
 			ctx,
@@ -182,7 +182,7 @@ func (h *Handler) Create(ctx *gin.Context) {
 
 	orderID := uuid.New().String()
 	totalAmount := strconv.FormatFloat(orderInput.TotalAmount, 'f', 2, 64)
-	if _, err := h.psqlConn.Exec(
+	if _, err := h.psqlPool.Exec(
 		ctx.Request.Context(),
 		_createQuery,
 		orderID,

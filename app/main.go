@@ -14,7 +14,7 @@ import (
 	"github.com/Woodfyn/cloud-native-platform/controllers/order"
 	"github.com/gin-contrib/graceful"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Config struct {
@@ -54,11 +54,8 @@ func main() {
 		graceful.WithShutdownTimeout(10*time.Second),
 		graceful.WithServerTimeouts(10*time.Second, 15*time.Second, 30*time.Second),
 		graceful.WithAfterShutdown(func(ctx context.Context) error {
-			var result error
-			return errors.Join(
-				result,
-				psqlConn.Close(ctx),
-			)
+			psqlConn.Close()
+			return nil
 		}),
 	)
 	if err != nil {
@@ -104,9 +101,9 @@ func initLogger(logLevel string) *slog.Logger {
 
 func initPSQLConn(
 	ctx context.Context,
-	psqlAddress string,
-) *pgx.Conn {
-	conn, err := pgx.Connect(ctx, psqlAddress)
+	address string,
+) *pgxpool.Pool {
+	conn, err := pgxpool.New(ctx, address)
 	if err != nil {
 		panic(err)
 	}
