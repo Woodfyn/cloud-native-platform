@@ -1,0 +1,30 @@
+name: CI action
+
+on:
+    push:
+        branches:
+            - master
+    pull_request:
+        branches:
+            - master  
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download dependencies"
+        run: |
+
+      - name: "Run tests check"
+        run: |
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download linter dependencies"
+        run: |
+
+      - name: "Run linter check"
+        run: |
+  
+  
