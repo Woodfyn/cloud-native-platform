@@ -1,3 +1,4 @@
+//nolint:gochecknoglobals // For tests global variable is able.
 package main
 
 import (
@@ -46,6 +47,7 @@ func TestMain(m *testing.M) {
 
 type mockHTTPWriter struct {
 	bytes.Buffer
+
 	statusCode int
 	header     http.Header
 }
@@ -61,12 +63,12 @@ func (m *mockHTTPWriter) WriteHeader(statusCode int) {
 func TestCreateOrder(t *testing.T) {
 	tt := []struct {
 		name           string
-		in             order.OrderInputSchema
+		in             order.InputSchema
 		wantStatusCode int
 	}{
 		{
 			name: "Test_1_happy_test",
-			in: order.OrderInputSchema{
+			in: order.InputSchema{
 				CustomerName: "Volodymyr Rud",
 				OrderNumber:  "1234",
 				TotalAmount:  100.24,
@@ -75,7 +77,7 @@ func TestCreateOrder(t *testing.T) {
 		},
 		{
 			name: "Test_2_negative_total_amount",
-			in: order.OrderInputSchema{
+			in: order.InputSchema{
 				CustomerName: "Volodymyr Rud",
 				OrderNumber:  "1234",
 				TotalAmount:  -10.48,
@@ -140,7 +142,7 @@ func TestGetOrders(t *testing.T) {
 		return
 	}
 
-	if err := db.PingContext(t.Context()); err != nil {
+	if err = db.PingContext(t.Context()); err != nil {
 		t.Errorf(
 			"Failed to ping to connection: %v",
 			err,
@@ -150,7 +152,7 @@ func TestGetOrders(t *testing.T) {
 
 	goose.SetBaseFS(tests.Migrations)
 
-	if err := goose.SetDialect("postgres"); err != nil {
+	if err = goose.SetDialect("postgres"); err != nil {
 		t.Errorf(
 			"Failed to set dialect for goose: %v",
 			err,
@@ -158,7 +160,7 @@ func TestGetOrders(t *testing.T) {
 		return
 	}
 
-	if err := goose.UpContext(t.Context(), db, "."); err != nil {
+	if err = goose.UpContext(t.Context(), db, "."); err != nil {
 		t.Errorf(
 			"Failed to run goose migrations: %v",
 			err,
@@ -169,7 +171,7 @@ func TestGetOrders(t *testing.T) {
 	t.Cleanup(func() {
 		defer db.Close()
 
-		if err := goose.DownContext(context.Background(), db, "."); err != nil {
+		if err = goose.DownContext(context.Background(), db, "."); err != nil {
 			t.Errorf(
 				"Failed to run goose migrations: %v",
 				err,
@@ -238,7 +240,8 @@ func TestGetOrders(t *testing.T) {
 			continue
 		}
 
-		resultBytes, err := io.ReadAll(&mockWriter.Buffer)
+		var resultBytes []byte
+		resultBytes, err = io.ReadAll(&mockWriter.Buffer)
 		if err != nil {
 			t.Errorf(
 				"Failed to read mock writer buffer: %v",
@@ -248,7 +251,7 @@ func TestGetOrders(t *testing.T) {
 		}
 
 		var resultOrders []order.Order
-		if err != json.Unmarshal(resultBytes, &resultOrders) {
+		if err = json.Unmarshal(resultBytes, &resultOrders); err != nil {
 			t.Errorf(
 				"Failed to unmarshal response: %v",
 				err,

@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/Woodfyn/cloud-native-platform/schema"
@@ -25,30 +25,38 @@ type TestDatabase struct {
 	DBInstance *pgxpool.Pool
 	DBURL      string
 	container  *postgres.PostgresContainer
+	logger     *slog.Logger
 }
 
 func SetupTestDatabase() *TestDatabase {
+	logger := slog.Default()
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
-		60*time.Second,
+		time.Minute,
 	)
 	defer cancel()
 
 	container, dbInstance, dbURL, err := createContainer(ctx)
 	if err != nil {
-		log.Fatal("failed to setup test: ", err)
+		logger.Error(
+			"failed to setup test",
+			slog.Any("error", err),
+		)
 	}
 
-	if err := migrateDB(ctx, dbURL); err != nil {
+	if err = migrateDB(ctx, dbURL); err != nil {
 		_ = testcontainers.TerminateContainer(container)
-
-		log.Fatal("failed to perform db migration: ", err)
+		logger.Error(
+			"failed to perform db migration",
+			slog.Any("error", err),
+		)
 	}
 
 	return &TestDatabase{
 		DBInstance: dbInstance,
 		DBURL:      dbURL,
 		container:  container,
+		logger:     logger,
 	}
 }
 
@@ -59,7 +67,7 @@ func (tdb *TestDatabase) TearDown() {
 
 	if tdb.container != nil {
 		if err := testcontainers.TerminateContainer(tdb.container); err != nil {
-			log.Printf("failed to terminate postgres container: %v", err)
+			tdb.logger.Error("failed to terminate postgres container", slog.Any("error", err))
 		}
 	}
 }
@@ -112,7 +120,7 @@ func createContainer(
 		)
 	}
 
-	if err := db.Ping(ctx); err != nil {
+	if err = db.Ping(ctx); err != nil {
 		db.Close()
 		_ = testcontainers.TerminateContainer(container)
 
@@ -138,7 +146,7 @@ func migrateDB(
 	}
 	defer db.Close()
 
-	if err := db.PingContext(ctx); err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		return fmt.Errorf(
 			"ping migration database: %w",
 			err,
@@ -147,21 +155,21 @@ func migrateDB(
 
 	goose.SetBaseFS(schema.SQL)
 
-	if err := goose.SetDialect("postgres"); err != nil {
+	if err = goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf(
 			"set goose dialect: %w",
 			err,
 		)
 	}
 
-	if err := goose.UpContext(ctx, db, "."); err != nil {
+	if err = goose.UpContext(ctx, db, "."); err != nil {
 		return fmt.Errorf(
 			"run goose migrations: %w",
 			err,
 		)
 	}
 
-	log.Println("migration done")
+	slog.Default().InfoContext(ctx, "Migration done")
 
 	return nil
 }

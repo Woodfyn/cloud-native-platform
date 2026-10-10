@@ -24,11 +24,12 @@ type Config struct {
 
 func initConfig() *Config {
 	get := func(key string) string {
-		if value := os.Getenv(key); value == "" {
-			panic(fmt.Errorf("Value %s must be privode", key))
-		} else {
-			return value
+		value := os.Getenv(key)
+		if value == "" {
+			panic(fmt.Errorf("value %s must be privode", key))
 		}
+
+		return value
 	}
 
 	return &Config{
@@ -36,6 +37,13 @@ func initConfig() *Config {
 		LogLevel:        get("LOG_LEVEL"),
 	}
 }
+
+const (
+	_shutdownTimeout    = 10 * time.Second
+	_serverReadTimeout  = 10 * time.Second
+	_serverWriteTimeout = 15 * time.Second
+	_serverIdleTimeout  = 30 * time.Second
+)
 
 func main() {
 	rootCtx, stop := signal.NotifyContext(
@@ -51,9 +59,13 @@ func main() {
 	orderHandler := order.NewHandler(psqlConn, logger)
 
 	router, err := graceful.Default(
-		graceful.WithShutdownTimeout(10*time.Second),
-		graceful.WithServerTimeouts(10*time.Second, 15*time.Second, 30*time.Second),
-		graceful.WithAfterShutdown(func(ctx context.Context) error {
+		graceful.WithShutdownTimeout(_shutdownTimeout),
+		graceful.WithServerTimeouts(
+			_serverReadTimeout,
+			_serverWriteTimeout,
+			_serverIdleTimeout,
+		),
+		graceful.WithAfterShutdown(func(_ context.Context) error {
 			psqlConn.Close()
 			return nil
 		}),
@@ -78,7 +90,7 @@ func main() {
 		ctx.String(http.StatusOK, "OK")
 	})
 
-	if err := router.RunWithContext(rootCtx); err != nil && errors.Is(err, context.Canceled) {
+	if err = router.RunWithContext(rootCtx); err != nil && errors.Is(err, context.Canceled) {
 		panic(err)
 	}
 }

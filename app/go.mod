@@ -1,6 +1,6 @@
 module github.com/Woodfyn/cloud-native-platform
 
-go 1.27.0
+go 1.27.1
 
 require (
 	github.com/gin-contrib/graceful v1.2.1

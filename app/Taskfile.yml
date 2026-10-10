@@ -80,3 +80,7 @@ tasks:
   run-integraion-tests:
     cmds:
       - go test ./tests/integration
+    
+  run-linter:
+    cmds:
+      - golangci-lint run

@@ -90,7 +90,7 @@ func (h *Handler) Get(ctx *gin.Context) {
 	orderRows := make([]orderDB, 0)
 	for rows.Next() {
 		var row orderDB
-		if err := rows.Scan(
+		if err = rows.Scan(
 			&row.OrderID,
 			&row.CustomerName,
 			&row.OrderNumber,
@@ -110,7 +110,7 @@ func (h *Handler) Get(ctx *gin.Context) {
 		orderRows = append(orderRows, row)
 	}
 
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		setError(
 			ctx,
 			http.StatusInternalServerError,
@@ -153,14 +153,14 @@ const _createQuery = `INSERT INTO orders (
 	$4
 );`
 
-type OrderInputSchema struct {
+type InputSchema struct {
 	CustomerName string  `json:"customer_name"`
 	OrderNumber  string  `json:"order_number"`
 	TotalAmount  float64 `json:"total_amount"`
 }
 
 func (h *Handler) Create(ctx *gin.Context) {
-	var orderInput OrderInputSchema
+	var orderInput InputSchema
 	if err := ctx.BindJSON(&orderInput); err != nil {
 		setError(
 			ctx,
