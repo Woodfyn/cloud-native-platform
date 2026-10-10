@@ -53,6 +53,15 @@ created_at,
 updated_at
 FROM orders`
 
+type Order struct {
+	OrderID      string  `json:"order_id"`
+	CustomerName string  `json:"customer_name"`
+	OrderNumber  string  `json:"order_number"`
+	TotalAmount  float64 `json:"total_amount"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    *string `json:"updated_at,omitempty"`
+}
+
 func (h *Handler) Get(ctx *gin.Context) {
 	rows, err := h.psqlPool.Query(
 		ctx.Request.Context(),
@@ -111,17 +120,7 @@ func (h *Handler) Get(ctx *gin.Context) {
 		return
 	}
 
-	type orderResult struct {
-		OrderID      string  `json:"order_id"`
-		CustomerName string  `json:"customer_name"`
-		OrderNumber  string  `json:"order_number"`
-		TotalAmount  float64 `json:"total_amount"`
-		CreatedAt    string  `json:"created_at"`
-		UpdatedAt    *string `json:"updated_at,omitempty"`
-	}
-
-	orderResults := make([]orderResult, len(orderRows))
-
+	orderResults := make([]Order, len(orderRows))
 	for i, row := range orderRows {
 		var updatedAt *string
 		if row.UpdatedAt.Valid {
@@ -129,7 +128,7 @@ func (h *Handler) Get(ctx *gin.Context) {
 			updatedAt = &value
 		}
 
-		orderResults[i] = orderResult{
+		orderResults[i] = Order{
 			OrderID:      row.OrderID,
 			CustomerName: row.CustomerName,
 			OrderNumber:  row.OrderNumber,

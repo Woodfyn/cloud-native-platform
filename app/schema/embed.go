@@ -3,4 +3,4 @@ package schema
 import "embed"
 
 //go:embed *.sql
-var Migrations embed.FS
+var SQL embed.FS

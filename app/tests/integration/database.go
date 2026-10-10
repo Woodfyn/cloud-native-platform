@@ -46,9 +46,9 @@ func SetupTestDatabase() *TestDatabase {
 	}
 
 	return &TestDatabase{
-		container:  container,
 		DBInstance: dbInstance,
 		DBURL:      dbURL,
+		container:  container,
 	}
 }
 
@@ -112,8 +112,6 @@ func createContainer(
 		)
 	}
 
-	// pgxpool.New only creates the pool configuration.
-	// Ping verifies that we can actually connect.
 	if err := db.Ping(ctx); err != nil {
 		db.Close()
 		_ = testcontainers.TerminateContainer(container)
@@ -147,7 +145,7 @@ func migrateDB(
 		)
 	}
 
-	goose.SetBaseFS(schema.Migrations)
+	goose.SetBaseFS(schema.SQL)
 
 	if err := goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf(

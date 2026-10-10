@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -10,24 +12,25 @@ import (
 	"testing"
 
 	"github.com/Woodfyn/cloud-native-platform/controllers/order"
+	"github.com/Woodfyn/cloud-native-platform/migrations/tests"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/pressly/goose/v3"
 )
 
 var (
-	testDBInstance *pgxpool.Pool
-	orderHandler   *order.Handler
-	testRouter     *gin.Engine
+	testDB       *TestDatabase
+	orderHandler *order.Handler
+	testRouter   *gin.Engine
 )
 
 // https://medium.com/@dilshataliev/integration-tests-with-golang-test-containers-and-postgres-abb49e8096c5
 func TestMain(m *testing.M) {
-	testDB := SetupTestDatabase()
-
-	testDBInstance = testDB.DBInstance
+	testDB = SetupTestDatabase()
 
 	orderHandler = order.NewHandler(
-		testDBInstance,
+		testDB.DBInstance,
 		slog.Default(),
 	)
 
@@ -116,5 +119,163 @@ func TestCreateOrder(t *testing.T) {
 }
 
 func TestGetOrders(t *testing.T) {
-	// t.Errorf("TODO: Implement me!")
+	dbURL, err := testDB.container.ConnectionString(
+		t.Context(),
+		"sslmode=disable",
+	)
+	if err != nil {
+		t.Errorf(
+			"Failed to get connection string: %v",
+			err,
+		)
+		return
+	}
+
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		t.Errorf(
+			"Failed to open sql connection: %v",
+			err,
+		)
+		return
+	}
+
+	if err := db.PingContext(t.Context()); err != nil {
+		t.Errorf(
+			"Failed to ping to connection: %v",
+			err,
+		)
+		return
+	}
+
+	goose.SetBaseFS(tests.Migrations)
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Errorf(
+			"Failed to set dialect for goose: %v",
+			err,
+		)
+		return
+	}
+
+	if err := goose.UpContext(t.Context(), db, "."); err != nil {
+		t.Errorf(
+			"Failed to run goose migrations: %v",
+			err,
+		)
+		return
+	}
+
+	t.Cleanup(func() {
+		defer db.Close()
+
+		if err := goose.DownContext(context.Background(), db, "."); err != nil {
+			t.Errorf(
+				"Failed to run goose migrations: %v",
+				err,
+			)
+			return
+		}
+	})
+
+	tt := []struct {
+		name           string
+		wantOrders     []order.Order
+		wantStatusCode int
+	}{
+		{
+			name: "Test_1_happy_test",
+			wantOrders: []order.Order{
+				{
+					OrderID:      "a0000000-0000-4000-8000-000000000001",
+					CustomerName: "John Smith",
+					OrderNumber:  "ORD-0001",
+					TotalAmount:  150.00,
+					CreatedAt:    "",
+					UpdatedAt:    nil,
+				},
+				{
+					OrderID:      "a0000000-0000-4000-8000-000000000002",
+					CustomerName: "Alice Johnson",
+					OrderNumber:  "ORD-0002",
+					TotalAmount:  275.50,
+					CreatedAt:    "",
+					UpdatedAt:    nil,
+				},
+				{
+					OrderID:      "a0000000-0000-4000-8000-000000000003",
+					CustomerName: "Bob Williams",
+					OrderNumber:  "ORD-0003",
+					TotalAmount:  420.00,
+					CreatedAt:    "",
+					UpdatedAt:    nil,
+				},
+			},
+			wantStatusCode: http.StatusOK,
+		},
+	}
+
+	for _, test := range tt {
+		mockWriter := &mockHTTPWriter{
+			Buffer: *bytes.NewBuffer([]byte{}),
+			header: make(http.Header),
+		}
+
+		ctx := gin.CreateTestContextOnly(mockWriter, testRouter)
+		ctx.Request = &http.Request{
+			Header: make(http.Header),
+		}
+
+		orderHandler.Get(ctx)
+
+		if mockWriter.statusCode != test.wantStatusCode {
+			t.Errorf(
+				"%s: Incorrect status code (want: %d, have: %d)",
+				test.name,
+				mockWriter.statusCode,
+				test.wantStatusCode,
+			)
+			continue
+		}
+
+		resultBytes, err := io.ReadAll(&mockWriter.Buffer)
+		if err != nil {
+			t.Errorf(
+				"Failed to read mock writer buffer: %v",
+				err,
+			)
+			continue
+		}
+
+		var resultOrders []order.Order
+		if err != json.Unmarshal(resultBytes, &resultOrders) {
+			t.Errorf(
+				"Failed to unmarshal response: %v",
+				err,
+			)
+			continue
+		}
+
+		// t.Logf(
+		// 	"Orders reuslt, want: %+v; got: %+v",
+		// 	test.wantOrders,
+		// 	resultOrders,
+		// )
+
+		diff := cmp.Diff(
+			test.wantOrders,
+			resultOrders,
+			cmpopts.IgnoreFields(
+				order.Order{},
+				"CreatedAt",
+				"UpdatedAt",
+			),
+		)
+		if diff != "" {
+			t.Errorf("Orders mismatch (-want +got):\n%s", diff)
+			continue
+		}
+
+		t.Logf("%s: Passed", test.name)
+	}
 }

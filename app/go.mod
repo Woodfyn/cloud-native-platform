@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/gin-contrib/graceful v1.2.1
 	github.com/gin-gonic/gin v1.12.0
+	github.com/google/go-cmp v0.7.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/testcontainers/testcontainers-go v0.44.0
