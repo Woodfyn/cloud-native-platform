@@ -129,4 +129,3 @@ jobs:
           name: go-test-results
           path: ./app/test-results.json
           if-no-files-found: warn
-      
