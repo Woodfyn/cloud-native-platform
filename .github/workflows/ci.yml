@@ -40,29 +40,41 @@ jobs:
             https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
             | sh -s -- -b /tmp/golangci-bin v2.14.0
 
-
       - name: Run tests and lint
         id: checks
         run: |
           set -uo pipefail
 
-          # Start tests
-          test_start=$(date +%s)
+          # Run tests in background
+          (
+            start=$(date +%s)
 
-          go test -race -count=1 -json ./... \
-            > test-results.json 2> test-errors.log &
+            go test -race -count=1 -json ./... \
+              > test-results.json 2> test-errors.log
+
+            status=$?
+            echo "$(( $(date +%s) - start ))" > test-duration.txt
+            exit "$status"
+          ) &
           test_pid=$!
 
-          # Start linter
-          lint_start=$(date +%s)
+          # Run linter in background
+          (
+            start=$(date +%s)
 
-          /tmp/golangci-bin/golangci-lint run \
-            > lint.log 2>&1 &
+            /tmp/golangci-bin/golangci-lint run \
+              > lint.log 2>&1
+
+            status=$?
+            echo "$(( $(date +%s) - start ))" > lint-duration.txt
+            exit "$status"
+          ) &
           lint_pid=$!
 
           result=0
 
           # Wait for tests
+          echo "::group::Tests"
           if wait "$test_pid"; then
             echo "tests=PASSED" >> "$GITHUB_OUTPUT"
           else
@@ -70,10 +82,15 @@ jobs:
             result=1
           fi
 
-          test_end=$(date +%s)
-          echo "test_duration=$((test_end - test_start))" >> "$GITHUB_OUTPUT"
+          echo "test_duration=$(cat test-duration.txt)" >> "$GITHUB_OUTPUT"
+
+          cat test-errors.log
+          grep -E '"Action":"fail"|WARNING: DATA RACE' \
+            test-results.json || true
+          echo "::endgroup::"
 
           # Wait for linter
+          echo "::group::Linter"
           if wait "$lint_pid"; then
             echo "lint=PASSED" >> "$GITHUB_OUTPUT"
           else
@@ -81,10 +98,10 @@ jobs:
             result=1
           fi
 
-          lint_end=$(date +%s)
-          echo "lint_duration=$((lint_end - lint_start))" >> "$GITHUB_OUTPUT"
+          echo "lint_duration=$(cat lint-duration.txt)" >> "$GITHUB_OUTPUT"
 
-          cat test-errors.log lint.log
+          cat lint.log
+          echo "::endgroup::"
 
           exit "$result"
 
