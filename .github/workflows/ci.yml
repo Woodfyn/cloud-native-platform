@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Build and Test
+  ci:
+    name: Build, Test and Lint
     runs-on: ubuntu-latest
 
     defaults:
@@ -20,35 +20,43 @@ jobs:
         working-directory: ./app
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
 
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
           go-version-file: ./app/go.mod
-          cache: true
           cache-dependency-path: ./app/go.sum
 
       - name: Download dependencies
         run: go mod download
 
-      - name: Verify dependencies
-        run: go mod verify
-
-      - name: Build
-        run: go build ./...
-
-      - name: Run tests
+      - name: Install linter
         run: |
-          set -o pipefail
-          go test -race -count=1 -json ./... | tee test-results.json
-      
-      - name: Run linter
-        uses: golangci/golangci-lint-action@v9.3.0
-        with:
-          working-directory: ./app
-          version: v2.14.0
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b /tmp/golangci-bin v2.14.0
+
+      - name: Run build, tests and lint in parallel
+        run: |
+          set -euo pipefail
+
+          go build ./... > build.log 2>&1 &
+          build_pid=$!
+
+          go test -race -count=1 -json ./... > test-results.json 2> test-errors.log &
+          test_pid=$!
+
+          /tmp/golangci-bin/golangci-lint run > lint.log 2>&1 &
+          lint_pid=$!
+
+          result=0
+          wait "$build_pid" || result=1
+          wait "$test_pid" || result=1
+          wait "$lint_pid" || result=1
+
+          cat build.log test-errors.log lint.log
+          exit "$result"
 
       - name: Upload test results
         if: always()
