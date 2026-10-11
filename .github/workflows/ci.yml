@@ -10,9 +10,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
-    name: Build, Test and Lint
+    name: Test and Lint
     runs-on: ubuntu-26.04
 
     defaults:
@@ -24,69 +28,57 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Go
+        id: setup-go
         uses: actions/setup-go@v7
         with:
           go-version-file: ./app/go.mod
           cache-dependency-path: ./app/go.sum
 
-      - name: Download dependencies
-        run: go mod download
-
       - name: Install linter
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+          curl -sSfL \
+            https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
             | sh -s -- -b /tmp/golangci-bin v2.14.0
 
-
-      - name: Run build, tests and lint in parallel
+      - name: Run tests and lint
         run: |
           set -uo pipefail
 
-          go build ./... > build.log 2>&1 &
-          build_pid=$!
-
-          go test -race -count=1 -json ./... > test-results.json 2> test-errors.log &
+          go test -race -count=1 -json ./... \
+            > test-results.json 2> test-errors.log &
           test_pid=$!
 
-          /tmp/golangci-bin/golangci-lint run > lint.log 2>&1 &
+          /tmp/golangci-bin/golangci-lint run \
+            > lint.log 2>&1 &
           lint_pid=$!
 
           result=0
 
-          echo "::group::Build"
-          if wait "$build_pid"; then
-            echo "✅ Build PASSED"
-          else
-            echo "❌ Build FAILED"
-            result=1
-          fi
-          cat build.log
-          echo "::endgroup::"
-
           echo "::group::Tests"
           if wait "$test_pid"; then
-            echo "✅ Tests PASSED"
+            echo "Tests PASSED"
           else
-            echo "❌ Tests FAILED"
+            echo "Tests FAILED"
             result=1
           fi
+
           cat test-errors.log
-          echo "Failed test events:"
-          grep -E '"Action":"fail"|WARNING: DATA RACE' test-results.json || true
+          grep -E '"Action":"fail"|WARNING: DATA RACE' \
+            test-results.json || true
           echo "::endgroup::"
 
           echo "::group::Linter"
           if wait "$lint_pid"; then
-            echo "✅ Linter PASSED"
+            echo "Linter PASSED"
           else
-            echo "❌ Linter FAILED"
+            echo "Linter FAILED"
             result=1
           fi
+
           cat lint.log
           echo "::endgroup::"
 
           exit "$result"
-
 
       - name: Upload test results
         if: always()
