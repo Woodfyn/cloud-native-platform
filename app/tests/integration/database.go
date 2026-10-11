@@ -1,4 +1,4 @@
-package integration
+package integration_test
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/Woodfyn/cloud-native-platform/schema"
 	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -83,7 +82,7 @@ func (tdb *TestDatabase) Open(
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Failed to get connection string: %v",
+			"failed to get connection string: %w",
 			err,
 		)
 	}
@@ -91,14 +90,14 @@ func (tdb *TestDatabase) Open(
 	db, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Failed to open sql connection: %v",
+			"failed to open sql connection: %w",
 			err,
 		)
 	}
 
 	if err = db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf(
-			"Failed to ping to connection: %v",
+			"failed to ping to connection: %w",
 			err,
 		)
 	}
@@ -174,7 +173,7 @@ func migrateDB(
 	db, err := testDB.Open(ctx)
 	if err != nil {
 		return fmt.Errorf(
-			"Failed to open db connection: %v",
+			"failed to open db connection: %w",
 			err,
 		)
 	}
@@ -196,7 +195,7 @@ func migrateDB(
 		)
 	}
 
-	slog.Default().InfoContext(ctx, "Migration done")
+	testDB.logger.InfoContext(ctx, "Migration done")
 
 	return nil
 }

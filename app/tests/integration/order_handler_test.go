@@ -1,5 +1,5 @@
 //nolint:gochecknoglobals // For tests global variable is able.
-package integration
+package integration_test
 
 import (
 	"bytes"
@@ -130,7 +130,8 @@ func TestCreateOrder(t *testing.T) {
 			header: make(http.Header),
 		}
 
-		inBytes, err := json.Marshal(&test.in)
+		var inBytes []byte
+		inBytes, err = json.Marshal(&test.in)
 		if err != nil {
 			t.Errorf("Failed to marshal test payload: %v", err)
 			return
