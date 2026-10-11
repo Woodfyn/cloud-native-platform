@@ -10,11 +10,6 @@ on:
 permissions:
   contents: read
 
-defaults:
-  run:
-    shell: bash
-    working-directory: ./app
-
 jobs:
   test:
     name: Build and Test
@@ -27,7 +22,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version-file: ./app/go.mod
           cache: true
 
       - name: Download dependencies
