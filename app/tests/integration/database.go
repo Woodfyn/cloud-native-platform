@@ -7,6 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	// Register pgx as a database/sql driver for Goose migrations.
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/Woodfyn/cloud-native-platform/schema"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
