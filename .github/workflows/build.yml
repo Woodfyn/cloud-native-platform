@@ -8,12 +8,10 @@ on:
         branches:
             - master  
 
+# TODO: Write dockerfile building and push to GutHub registry
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: "Download dependencies"
-        run: |
-
-      - name: "Run tests check"
         run: |

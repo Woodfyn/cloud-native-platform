@@ -3,3 +3,4 @@ schema
 migrations
 tmp
 .env
+tests
