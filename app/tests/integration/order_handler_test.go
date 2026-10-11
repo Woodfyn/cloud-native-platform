@@ -1,5 +1,5 @@
 //nolint:gochecknoglobals // For tests global variable is able.
-package main
+package integration
 
 import (
 	"bytes"
