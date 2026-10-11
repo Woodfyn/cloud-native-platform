@@ -41,6 +41,7 @@ jobs:
             | sh -s -- -b /tmp/golangci-bin v2.14.0
 
       - name: Run tests and lint
+        id: checks
         run: |
           set -uo pipefail
 
@@ -54,31 +55,38 @@ jobs:
 
           result=0
 
-          echo "::group::Tests"
           if wait "$test_pid"; then
-            echo "Tests PASSED"
+            echo "tests=PASSED" >> "$GITHUB_OUTPUT"
           else
-            echo "Tests FAILED"
+            echo "tests=FAILED" >> "$GITHUB_OUTPUT"
             result=1
           fi
 
-          cat test-errors.log
-          grep -E '"Action":"fail"|WARNING: DATA RACE' \
-            test-results.json || true
-          echo "::endgroup::"
-
-          echo "::group::Linter"
           if wait "$lint_pid"; then
-            echo "Linter PASSED"
+            echo "lint=PASSED" >> "$GITHUB_OUTPUT"
           else
-            echo "Linter FAILED"
+            echo "lint=FAILED" >> "$GITHUB_OUTPUT"
             result=1
           fi
 
-          cat lint.log
-          echo "::endgroup::"
+          cat test-errors.log lint.log
 
           exit "$result"
+
+      - name: Generate Summary
+        if: always()
+        env:
+          TEST_RESULT: ${{ steps.checks.outputs.tests }}
+          LINT_RESULT: ${{ steps.checks.outputs.lint }}
+        run: |
+          {
+            echo "## Go CI Results"
+            echo ""
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Tests | ${TEST_RESULT:-NOT RUN} |"
+            echo "| Linter | ${LINT_RESULT:-NOT RUN} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test results
         if: always()
@@ -87,3 +95,4 @@ jobs:
           name: go-test-results
           path: ./app/test-results.json
           if-no-files-found: warn
+      
