@@ -44,7 +44,14 @@ func SetupTestDatabase() *TestDatabase {
 		)
 	}
 
-	if err = migrateDB(ctx, dbURL); err != nil {
+	testDB := &TestDatabase{
+		DBInstance: dbInstance,
+		DBURL:      dbURL,
+		container:  container,
+		logger:     logger,
+	}
+
+	if err = migrateDB(ctx, testDB); err != nil {
 		_ = testcontainers.TerminateContainer(container)
 		logger.Error(
 			"failed to perform db migration",
@@ -52,12 +59,7 @@ func SetupTestDatabase() *TestDatabase {
 		)
 	}
 
-	return &TestDatabase{
-		DBInstance: dbInstance,
-		DBURL:      dbURL,
-		container:  container,
-		logger:     logger,
-	}
+	return testDB
 }
 
 func (tdb *TestDatabase) TearDown() {
@@ -70,6 +72,38 @@ func (tdb *TestDatabase) TearDown() {
 			tdb.logger.Error("failed to terminate postgres container", slog.Any("error", err))
 		}
 	}
+}
+
+func (tdb *TestDatabase) Open(
+	ctx context.Context,
+) (*sql.DB, error) {
+	dbURL, err := tdb.container.ConnectionString(
+		ctx,
+		"sslmode=disable",
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"Failed to get connection string: %v",
+			err,
+		)
+	}
+
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"Failed to open sql connection: %v",
+			err,
+		)
+	}
+
+	if err = db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf(
+			"Failed to ping to connection: %v",
+			err,
+		)
+	}
+
+	return db, nil
 }
 
 func createContainer(
@@ -135,23 +169,16 @@ func createContainer(
 
 func migrateDB(
 	ctx context.Context,
-	dbURL string,
+	testDB *TestDatabase,
 ) error {
-	db, err := sql.Open("pgx", dbURL)
+	db, err := testDB.Open(ctx)
 	if err != nil {
 		return fmt.Errorf(
-			"open migration database: %w",
+			"Failed to open db connection: %v",
 			err,
 		)
 	}
 	defer db.Close()
-
-	if err = db.PingContext(ctx); err != nil {
-		return fmt.Errorf(
-			"ping migration database: %w",
-			err,
-		)
-	}
 
 	goose.SetBaseFS(schema.SQL)
 

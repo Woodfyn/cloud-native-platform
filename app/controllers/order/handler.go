@@ -1,6 +1,7 @@
 package order
 
 import (
+	"context"
 	"database/sql"
 	"log/slog"
 	"net/http"
@@ -9,21 +10,42 @@ import (
 	"uuid"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
+type DBAdapter interface {
+	Exec(
+		ctx context.Context,
+		sql string,
+		arguments ...any,
+	) (pgconn.CommandTag, error)
+
+	Query(
+		ctx context.Context,
+		sql string,
+		args ...any,
+	) (pgx.Rows, error)
+
+	QueryRow(
+		ctx context.Context,
+		sql string,
+		args ...any,
+	) pgx.Row
+}
+
 type Handler struct {
-	psqlPool *pgxpool.Pool
-	log      *slog.Logger
+	db  DBAdapter
+	log *slog.Logger
 }
 
 func NewHandler(
-	psqlPool *pgxpool.Pool,
+	db DBAdapter,
 	log *slog.Logger,
 ) *Handler {
 	return &Handler{
-		psqlPool: psqlPool,
-		log:      log,
+		db:  db,
+		log: log,
 	}
 }
 
@@ -63,7 +85,7 @@ type Order struct {
 }
 
 func (h *Handler) Get(ctx *gin.Context) {
-	rows, err := h.psqlPool.Query(
+	rows, err := h.db.Query(
 		ctx.Request.Context(),
 		_getQuery,
 	)
@@ -181,7 +203,7 @@ func (h *Handler) Create(ctx *gin.Context) {
 
 	orderID := uuid.New().String()
 	totalAmount := strconv.FormatFloat(orderInput.TotalAmount, 'f', 2, 64)
-	if _, err := h.psqlPool.Exec(
+	if _, err := h.db.Exec(
 		ctx.Request.Context(),
 		_createQuery,
 		orderID,

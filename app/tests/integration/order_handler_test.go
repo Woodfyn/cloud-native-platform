@@ -4,7 +4,6 @@ package integration
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -35,8 +34,8 @@ func TestMain(m *testing.M) {
 		slog.Default(),
 	)
 
-	testRouter = gin.Default()
 	gin.SetMode(gin.TestMode)
+	testRouter = gin.Default()
 
 	code := m.Run()
 
@@ -61,6 +60,45 @@ func (m *mockHTTPWriter) WriteHeader(statusCode int) {
 }
 
 func TestCreateOrder(t *testing.T) {
+	db, err := testDB.Open(t.Context())
+	if err != nil {
+		t.Errorf(
+			"Failed to open connection: %v",
+			err,
+		)
+		return
+	}
+
+	goose.SetBaseFS(tests.CreateOrders)
+
+	if err = goose.SetDialect("postgres"); err != nil {
+		t.Errorf(
+			"Failed to set dialect for goose: %v",
+			err,
+		)
+		return
+	}
+
+	if err = goose.UpContext(t.Context(), db, "."); err != nil {
+		t.Errorf(
+			"Failed to run goose migrations: %v",
+			err,
+		)
+		return
+	}
+
+	t.Cleanup(func() {
+		defer db.Close()
+
+		if err = goose.DownContext(context.Background(), db, "."); err != nil {
+			t.Errorf(
+				"Failed to run goose migrations: %v",
+				err,
+			)
+			return
+		}
+	})
+
 	tt := []struct {
 		name           string
 		in             order.InputSchema
@@ -121,36 +159,16 @@ func TestCreateOrder(t *testing.T) {
 }
 
 func TestGetOrders(t *testing.T) {
-	dbURL, err := testDB.container.ConnectionString(
-		t.Context(),
-		"sslmode=disable",
-	)
+	db, err := testDB.Open(t.Context())
 	if err != nil {
 		t.Errorf(
-			"Failed to get connection string: %v",
+			"Failed to open connection: %v",
 			err,
 		)
 		return
 	}
 
-	db, err := sql.Open("pgx", dbURL)
-	if err != nil {
-		t.Errorf(
-			"Failed to open sql connection: %v",
-			err,
-		)
-		return
-	}
-
-	if err = db.PingContext(t.Context()); err != nil {
-		t.Errorf(
-			"Failed to ping to connection: %v",
-			err,
-		)
-		return
-	}
-
-	goose.SetBaseFS(tests.Migrations)
+	goose.SetBaseFS(tests.GetOrders)
 
 	if err = goose.SetDialect("postgres"); err != nil {
 		t.Errorf(
