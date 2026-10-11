@@ -43,6 +43,9 @@ jobs:
         run: |
           set -o pipefail
           go test -race -count=1 -json ./... | tee test-results.json
+      
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v9.3.0
 
       - name: Upload test results
         if: always()
