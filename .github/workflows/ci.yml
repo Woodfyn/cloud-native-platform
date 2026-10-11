@@ -46,6 +46,9 @@ jobs:
       
       - name: Run linter
         uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          working-directory: ./app
+          version: v2.14.0
 
       - name: Upload test results
         if: always()
