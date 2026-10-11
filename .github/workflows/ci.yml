@@ -37,9 +37,10 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
             | sh -s -- -b /tmp/golangci-bin v2.14.0
 
+
       - name: Run build, tests and lint in parallel
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
           go build ./... > build.log 2>&1 &
           build_pid=$!
@@ -51,12 +52,41 @@ jobs:
           lint_pid=$!
 
           result=0
-          wait "$build_pid" || result=1
-          wait "$test_pid" || result=1
-          wait "$lint_pid" || result=1
 
-          cat build.log test-errors.log lint.log
+          echo "::group::Build"
+          if wait "$build_pid"; then
+            echo "✅ Build PASSED"
+          else
+            echo "❌ Build FAILED"
+            result=1
+          fi
+          cat build.log
+          echo "::endgroup::"
+
+          echo "::group::Tests"
+          if wait "$test_pid"; then
+            echo "✅ Tests PASSED"
+          else
+            echo "❌ Tests FAILED"
+            result=1
+          fi
+          cat test-errors.log
+          echo "Failed test events:"
+          grep -E '"Action":"fail"|WARNING: DATA RACE' test-results.json || true
+          echo "::endgroup::"
+
+          echo "::group::Linter"
+          if wait "$lint_pid"; then
+            echo "✅ Linter PASSED"
+          else
+            echo "❌ Linter FAILED"
+            result=1
+          fi
+          cat lint.log
+          echo "::endgroup::"
+
           exit "$result"
+
 
       - name: Upload test results
         if: always()
