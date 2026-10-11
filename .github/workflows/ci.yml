@@ -40,14 +40,21 @@ jobs:
             https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
             | sh -s -- -b /tmp/golangci-bin v2.14.0
 
+
       - name: Run tests and lint
         id: checks
         run: |
           set -uo pipefail
 
+          # Start tests
+          test_start=$(date +%s)
+
           go test -race -count=1 -json ./... \
             > test-results.json 2> test-errors.log &
           test_pid=$!
+
+          # Start linter
+          lint_start=$(date +%s)
 
           /tmp/golangci-bin/golangci-lint run \
             > lint.log 2>&1 &
@@ -55,6 +62,7 @@ jobs:
 
           result=0
 
+          # Wait for tests
           if wait "$test_pid"; then
             echo "tests=PASSED" >> "$GITHUB_OUTPUT"
           else
@@ -62,12 +70,19 @@ jobs:
             result=1
           fi
 
+          test_end=$(date +%s)
+          echo "test_duration=$((test_end - test_start))" >> "$GITHUB_OUTPUT"
+
+          # Wait for linter
           if wait "$lint_pid"; then
             echo "lint=PASSED" >> "$GITHUB_OUTPUT"
           else
             echo "lint=FAILED" >> "$GITHUB_OUTPUT"
             result=1
           fi
+
+          lint_end=$(date +%s)
+          echo "lint_duration=$((lint_end - lint_start))" >> "$GITHUB_OUTPUT"
 
           cat test-errors.log lint.log
 
@@ -77,15 +92,17 @@ jobs:
         if: always()
         env:
           TEST_RESULT: ${{ steps.checks.outputs.tests }}
+          TEST_DURATION: ${{ steps.checks.outputs.test_duration }}
           LINT_RESULT: ${{ steps.checks.outputs.lint }}
+          LINT_DURATION: ${{ steps.checks.outputs.lint_duration }}
         run: |
           {
             echo "## Go CI Results"
             echo ""
-            echo "| Check | Result |"
-            echo "|---|---|"
-            echo "| Tests | ${TEST_RESULT:-NOT RUN} |"
-            echo "| Linter | ${LINT_RESULT:-NOT RUN} |"
+            echo "| Check | Status | Duration |"
+            echo "|---|---|---|"
+            echo "| Tests | ${TEST_RESULT:-NOT RUN} | ${TEST_DURATION:-N/A}s |"
+            echo "| Linter | ${LINT_RESULT:-NOT RUN} | ${LINT_DURATION:-N/A}s |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test results
