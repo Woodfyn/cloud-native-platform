@@ -1,17 +1,45 @@
-name: Build
+name: Go Build
 
 on:
-    push:
-        branches:
-            - master
-    pull_request:
-        branches:
-            - master  
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
 
-# TODO: Write dockerfile building and push to GutHub registry
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Test and Lint
+    runs-on: ubuntu-26.04
     steps:
-      - name: "Download dependencies"
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        id: setup-go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: ./app/go.mod
+          cache-dependency-path: ./app/go.sum
+
+      - name: Build image
         run: |
+          docker build -t cloud-native-api:latest .
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Build Inventory Image
+        run: |
+          docker build . --tag ghcr.io/Woodfyn/store:latest
+          docker push ghcr.io/Woodfyn/store:latest
