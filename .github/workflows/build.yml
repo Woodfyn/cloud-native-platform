@@ -15,6 +15,11 @@ jobs:
   build:
     name: Dockerfile
     runs-on: ubuntu-26.04
+
+    defaults:
+      run:
+        working-directory: ./app
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
