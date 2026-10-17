@@ -35,5 +35,9 @@ jobs:
 
       - name: Build Inventory Image
         run: |
-          docker build . --tag ghcr.io/Woodfyn/store:latest
-          docker push ghcr.io/Woodfyn/store:latest
+          # Convert the repository name to lowercase to comply with GHCR naming rules
+          IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}:latest" | tr '[:upper:]' '[:lower:]')
+          
+          echo "Building image: $IMAGE_NAME"
+          docker build . --tag "$IMAGE_NAME"
+          docker push "$IMAGE_NAME"
